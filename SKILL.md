@@ -3,6 +3,17 @@ name: drama-review
 description: 竖屏短剧 / 漫剧 AI 剧本审查：脚本先查确定性硬伤（体量、占位省略、△比喻腔、镜头外貌、单句长度、每场说话人数、出场走位、作者口吻穿帮、跨集套路反应、文学腔），再由模型逐集写审查卡（钩子、情绪兑现、冲突动机、人物口吻、接戏、节奏、可拍、合规），脚本校验每条意见的引文真在剧本里，最后合成整体加逐集的问题清单和修改建议，分「下限·必改」和「上限·可提」两档。按剧本类型（原创、高仿、续写、润色）取阈值。 USE WHEN 审查剧本、评审剧本、审稿、剧本质量、AI 剧本问题、每一集有什么问题、给修改建议、剧本过不过关、查 AI 味、下限问题、怎么提高上限、drama-clone 写完的剧本审一遍。 NOT FOR 写剧本或改稿（用 drama-clone、DramaContinuation、DramaPolish）、只出选题。
 metadata:
   display_name: AI 剧本审查
+  display_name_en: AI Script Review
+  description_zh: 审查 AI 写的短剧剧本，逐集找出钩子、情绪、口吻、接戏等问题，每条定位到场次和原句并给出改法，分必改和可提两档。
+  description_en: Reviews AI-written short drama scripts episode by episode, locating each problem in hooks, payoff, voice and continuity to the scene and line, with a concrete fix, split into must-fix and could-improve.
+  examples_zh:
+  - 帮我审一下这部剧本，每一集有什么问题、怎么改
+  - 这是 drama-clone 写的 60 集高仿剧本，按高仿标准审一遍
+  - 查查这个剧本的 AI 味和接戏问题，出一份审查报告
+  examples_en:
+  - Review this script and tell me what is wrong in each episode and how to fix it
+  - Review this 60-episode clone script from drama-clone against clone standards
+  - Check this script for AI-sounding writing and continuity breaks, and write a review report
   version: 0.1.0
   author: MaLiAI
 ---
