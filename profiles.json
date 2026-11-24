@@ -1,0 +1,55 @@
+{
+  "_note": "剧本类型决定阈值。null 表示这个类型不查这一项。命令行的 --min-total 等参数会覆盖这里的值；用户或客户给了要求，以要求为准。",
+  "original": {
+    "label": "原创",
+    "min_total": 1200,
+    "min_scenes": null,
+    "max_locations": 3,
+    "locations_level": "floor",
+    "max_speakers": 4,
+    "max_line_han": null,
+    "min_action_ratio": 0.2,
+    "forbid_camera": false,
+    "forbid_appearance": false,
+    "_why": "字数沿用 DramaReview 的爆款线：正文每集 ≥1200 字。DramaReview 的「≥10 场」只适合竖屏快切，横屏和漫剧一集常常只有 3-4 场（实测一部 80 集横屏漫剧集集不到 10 场），所以默认不查，竖屏项目要查就加 --min-scenes 10。单集物理地点 >3 算过密场切。"
+  },
+  "clone": {
+    "label": "高仿（drama-clone）",
+    "min_total": null,
+    "min_scenes": null,
+    "max_locations": 3,
+    "locations_level": "floor",
+    "max_speakers": 4,
+    "max_line_han": 20,
+    "min_action_ratio": 0.2,
+    "forbid_camera": true,
+    "forbid_appearance": true,
+    "_why": "时长照原剧（实测中位数 72 秒），字数下限由用户定，所以不设默认值，用 --min-total 传；场次跟原剧走，不按 10 场卡。制作规则来自客户审稿：每场 ≤4 人开口、单句 ≤20 字、不写镜头和外貌。"
+  },
+  "continuation": {
+    "label": "续写（DramaContinuation）",
+    "min_total": 1200,
+    "min_scenes": null,
+    "max_locations": 3,
+    "locations_level": "floor",
+    "max_speakers": 4,
+    "max_line_han": null,
+    "min_action_ratio": 0.2,
+    "forbid_camera": false,
+    "forbid_appearance": false,
+    "_why": "续写的体量要和前面已写的集对齐；没有更具体的要求时按原创的线。"
+  },
+  "polish": {
+    "label": "润色（DramaPolish）",
+    "min_total": null,
+    "min_scenes": null,
+    "max_locations": 2,
+    "locations_level": "floor",
+    "max_speakers": 4,
+    "max_line_han": null,
+    "min_action_ratio": 0.2,
+    "forbid_camera": false,
+    "forbid_appearance": false,
+    "_why": "润色不改台词，体量不由润色决定；DramaPolish 要求每集场景切换 ≤2 次，所以地点上限是 2。"
+  }
+}
