@@ -26,4 +26,4 @@ python3 scripts/review.py lint 剧本.md --profile original   # 只跑脚本层
 - 第二期（本版）：整季层。只读逐集卡，脚本算留存曲线、塌方区、疲软区、爽点复读、悬念线账、总弹簧前的大揭晓，模型写整季卡说原因和改法。
 - 第三期：校准。拿编剧和客户的真实审稿意见当标准答案，量模型提的问题有几成对得上。
 
-规则大多来自 [drama-clone](../drama-clone) 的 `clone_check.py`，docx 抽取来自 DramaReview。和 drama-clone 的公共检查代码目前是复制的，后面再统一。
+规则大多来自 [drama-clone](https://github.com/ZhiBoLingXi/drama-clone) 的 `clone_check.py`，docx 抽取来自 DramaReview。和 drama-clone 的公共检查代码目前是复制的，后面再统一。
