@@ -14,19 +14,18 @@ metadata:
   - Review this script and tell me what is wrong in each episode and how to fix it
   - Review this 60-episode clone script from drama-clone against clone standards
   - Check this script for AI-sounding writing and continuity breaks, and write a review report
-  version: 0.1.0
+  version: 0.2.0
   author: MaLiAI
 ---
 
 # AI 剧本审查
 
-审一部 AI 写的剧本：整体有哪些问题、每一集有哪些问题、每个问题怎么改。三层：
+审一部 AI 写的剧本：整体有哪些问题、每一集有哪些问题、每个问题怎么改。四层：
 
 1. **脚本层**（`scripts/scriptlib.py`，零模型成本）：能数出来的硬伤，规则见 `references/lint-rules.md`。
 2. **逐集卡**（一集一个上下文，中档模型即可）：脚本判不了的戏，标准见 `references/card-rubric.md`。
-3. **报告**：脚本把两层合起来，出总览、逐集一览、下限清单、上限清单。
-
-整季层（留存曲线、在第几集塌、兑现方式重复、总弹簧提前泄）是第二期，还没做。现在的报告会写明这一点。
+3. **整季层**（`scripts/season.py` 算 + 一个主力模型上下文判）：只读逐集卡，不读正文。脚本算留存曲线、塌方区、疲软区、爽点复读、悬念线账、总弹簧前的大揭晓；模型读一页整季任务包，写整季卡说清为什么塌、怎么改，标准见 `references/season-rubric.md`。
+4. **报告**：整季结论在前，接着逐集一览、下限清单、上限清单。
 
 ## 怎么执行（每一步先跑 next）
 
@@ -44,6 +43,7 @@ python3 <技能目录>/scripts/review.py next --dir <审查目录> [--parallel 4
   - `continuation` 续写、`polish` 润色。阈值和理由都在 `profiles.json`。
   - 用户或客户给了具体要求（字数、场数），用 `--min-total`、`--min-scenes`、`--max-locations`、`--max-line-han` 覆盖。竖屏快切项目要查场数就加 `--min-scenes 10`。
 - 有设定圣经就用 `--bible` 带上，任务包会按本集开口的人摘人物小节，审口吻时有依据。
+- 知道总弹簧（最大的身份或底牌揭晓）计划落在第几集，就用 `--spring-ep N` 带上（drama-clone 项目看 `beat-sheet.json` 的 `mainSpring.episode`）。整季层会逐条核对它之前的大揭晓是不是提前泄了。
 
 ```bash
 python3 <技能目录>/scripts/review.py init 剧本.md --profile clone --min-total 800 --out review/ [--bible bible.md]
@@ -55,9 +55,15 @@ python3 <技能目录>/scripts/review.py init 剧本.md --profile clone --min-to
 - **一集一个上下文，只读这一集的任务包，读一次就写卡。** 每多读一个文件就多一轮，每轮都要重读整个上下文。
 - 写 `review/card-NNN.json`，跑 `review.py check review/ --ep N`，没过就照提示改。`check` 会拦：引文在正文里找不到、场号不存在、改法太短或只说「加强」「提升」、有下限问题却判 `pass`。
 - 有子代理就用 `next --parallel 4` 一次拿几集，每个子代理只负责一集，返回一行：第几集、过没过 check。主线程不读卡片内容，最后看报告。
-- 中档模型就够。按顺序审时，`next` 会把上一集卡片里的「结尾状态」换进下一集的任务包，接戏核对更准；并行审时用上一集最后一场原文。
+- 中档模型就够。按顺序审时，`next` 会把上一集卡片里的「结尾状态」和前面没收的悬念线换进下一集的任务包，接戏和收线核对更准；并行审时用上一集最后一场原文，收线只能靠整季层对账。
+- 卡片里的 `payoff`（爽点类型）、`reveals`（大揭晓）、`threads`（开了哪条线、收了哪条线）要如实写，整季层全靠它们。
 
-### 3 · 报告
+### 3 · 整季
+- 逐集卡全部过了校验，`next` 会算整季数据，写出 `review/season-packet.md`：留存曲线、塌方区、疲软区、爽点分布和复读、悬念线账、大揭晓列表、每集一行摘要。一页，不含正文。
+- 用**主力模型**读这一页，写 `review/season-card.json`，跑 `review.py check review/ --season`。`check` 会拦：脚本算出的塌方区没有交代、总弹簧之前的大揭晓没表态、集号不是审过的集、改法太泛。
+- 只有 1 集的稿子跳过这一步。
+
+### 4 · 报告
 ```bash
 python3 <技能目录>/scripts/review.py report review/ --out review/审查报告.md
 ```

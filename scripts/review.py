@@ -6,7 +6,8 @@
   review.py init   <剧本.md> --profile clone --out review/ [--bible bible.md] [--min-total 800]
                                                          脚本层 + 每集一份审查任务包 packet-NNN.md
   review.py check  review/ [--ep 7]                       校验审查卡 card-NNN.json（引文必须真在剧本里）
-  review.py report review/ [--out 审查报告.md]            合成整体 + 逐集报告
+  review.py check  review/ --season                       校验整季卡 season-card.json
+  review.py report review/ [--out 审查报告.md]            合成整季 + 逐集报告
 
 退出码：0 通过；1 输入错误；2 有问题。
 """
@@ -19,6 +20,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from scriptlib import DIMS, SCENE_HEAD, han, lint_script, norm, pick_bodies, speech_lines, split_episodes  # noqa: E402
+import season  # noqa: E402
 
 SKILL_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ME = os.path.abspath(__file__)
@@ -77,6 +79,12 @@ def packet(n, lines, prev, issues, p, bible, cfg):
            f"- **写到**：`{os.path.join(cfg['dir'], f'card-{n:03d}.json')}`",
            f"- **写完跑**：`python3 {ME} check {cfg['dir']} --ep {n}`，没过就照提示改卡片。", ""]
     out += ["## 上一集结尾", "", prev or "（这是第一集，或上一集不在这份稿子里）", ""]
+    pending = season.open_threads_before(cfg["dir"], n)
+    out += ["## 没收的线（前面集审查卡里开了、还没收的悬念）", "",
+            "本集收掉了哪条，就把它的 id 写进卡片 threads.closed；本集新开的悬念写进 threads.opened。"
+            "前面的集还没审（并行审）时这里会是空的，照常写本集新开的就行。", ""]
+    out += [f"- {tid}（第{t['ep']}集开）{t['what']}" for tid, t in pending[-30:]] or ["- 无"]
+    out.append("")
     if bible:
         secs = [s for s in _sections(bible) if any(x in s for x in names)]
         if secs:
@@ -121,7 +129,8 @@ def cmd_init(args):
     d = os.path.abspath(args.out)
     os.makedirs(d, exist_ok=True)
     cfg = {"script": os.path.abspath(args.script), "profile": p, "dir": d,
-           "bible": os.path.abspath(args.bible) if args.bible else None, "episodes": sorted(stats)}
+           "bible": os.path.abspath(args.bible) if args.bible else None, "episodes": sorted(stats),
+           "springEp": args.spring_ep}
     with open(os.path.join(d, "config.json"), "w", encoding="utf-8") as f:
         json.dump(cfg, f, ensure_ascii=False, indent=1)
     with open(os.path.join(d, "lint.json"), "w", encoding="utf-8") as f:
@@ -157,6 +166,20 @@ def validate_card(path, n, ep_text, scene_names):
             errs.append(f"{k}.note 要写一句理由")
     if not (c.get("exit") or "").strip():
         errs.append("exit 要写本集结尾状态一句话，下一集接戏用")
+    # 整季层要用的三样：爽点类型、大揭晓、悬念线开收
+    if c.get("payoff") not in season.PAYOFFS:
+        errs.append(f"payoff 只能是：{' / '.join(season.PAYOFFS)}")
+    rv = c.get("reveals")
+    if not isinstance(rv, list) or any(not isinstance(r, dict) or r.get("level") not in season.REVEAL_LEVELS or not r.get("what") for r in rv):
+        errs.append("reveals 要是数组，每项 {what: 揭晓了什么, level: major 或 minor}；没有就写 []")
+    th = c.get("threads")
+    if not isinstance(th, dict) or not isinstance(th.get("opened"), list) or not isinstance(th.get("closed"), list):
+        errs.append("threads 要写成 {opened: [本集新开的悬念], closed: [本集收掉的线的 id，如 T3-1]}，没有就写空数组")
+    else:
+        for tid in th["closed"]:
+            m = season.THREAD_ID.match(str(tid))
+            if not m or int(m.group(1)) >= n:
+                errs.append(f"threads.closed 里的「{tid}」不对：写任务包「没收的线」里列出的 id（T集号-序号），只能收前面集开的线")
     issues = c.get("issues")
     if not isinstance(issues, list):
         return errs + ["issues 要是数组（没问题就写 []）"], c
@@ -205,9 +228,49 @@ def card_status(cfg, eps, n):
     return ("ok" if not errs else "bad"), errs, card
 
 
+def valid_cards(cfg, eps):
+    out = {}
+    for n in sorted(eps):
+        st, _, card = card_status(cfg, eps, n)
+        if st == "ok":
+            out[n] = card
+    return out
+
+
+def season_data(cfg, eps):
+    """算整季数据并写出 season.json 和整季任务包 season-packet.md。只读逐集卡和脚本统计。"""
+    d = cfg["dir"]
+    cards = valid_cards(cfg, eps)
+    stats = {int(k): v for k, v in load(os.path.join(d, "lint.json"))["stats"].items()}
+    s = season.compute(cards, stats, sorted(eps), cfg.get("springEp"))
+    with open(os.path.join(d, "season.json"), "w", encoding="utf-8") as f:
+        json.dump(s, f, ensure_ascii=False, indent=1)
+    with open(os.path.join(d, "season-packet.md"), "w", encoding="utf-8") as f:
+        f.write(season.digest(s, cards, d, ME, read(os.path.join(SKILL_DIR, "references", "season-rubric.md"))))
+    return s, cards
+
+
+def season_status(cfg, eps, s=None):
+    path = os.path.join(cfg["dir"], "season-card.json")
+    if not os.path.exists(path):
+        return "missing", [], None
+    try:
+        card = load(path)
+    except ValueError as e:
+        return "bad", [f"不是合法 JSON：{e}"], None
+    if s is None:
+        s, _ = season_data(cfg, eps)
+    errs = season.validate_season(card, s, han, VAGUE)
+    return ("ok" if not errs else "bad"), errs, card
+
+
 def cmd_check(args):
     cfg = load(os.path.join(args.dir, "config.json"))
     eps = episode_map(cfg)
+    if args.season:
+        st, errs, _ = season_status(cfg, eps)
+        print(json.dumps({"passed": st == "ok", "status": st, "fix": errs[:20]}, ensure_ascii=False, indent=1))
+        return 0 if st == "ok" else 2
     todo = [args.ep] if args.ep else sorted(eps)
     res, bad = {}, False
     for n in todo:
@@ -252,7 +315,17 @@ def cmd_next(args):
                           "episodes": [{"ep": n, "packet": os.path.join(d, f"packet-{n:03d}.md")} for n in batch]},
                          ensure_ascii=False, indent=1))
         return 0
-    print(json.dumps({"step": "3 报告", "todo": "全部审完。合成报告，把报告文件交给用户。",
+    if len(eps) >= 2:
+        s, _ = season_data(cfg, eps)
+        st, errs, _ = season_status(cfg, eps, s)
+        if st != "ok":
+            print(json.dumps({"step": "3 整季",
+                              "todo": ("逐集都审完了。读整季任务包（只有一页，不读正文），写整季卡，再跑 check --season。"
+                                       "用主力模型：这一步是整部剧能不能投的判断。")
+                              if st == "missing" else "整季卡没过校验，照下面改 season-card.json，再跑 next。",
+                              "packet": os.path.join(d, "season-packet.md"), "fix": errs[:20]}, ensure_ascii=False, indent=1))
+            return 0
+    print(json.dumps({"step": "4 报告", "todo": "全部审完。合成报告，把报告文件交给用户。",
                       "cmd": f"python3 {ME} report {d} --out {os.path.join(d, '审查报告.md')}"}, ensure_ascii=False, indent=1))
     return 0
 
@@ -286,8 +359,12 @@ def cmd_report(args):
            + (f"，审查卡没过校验 {len(invalid)} 集（{_ranges(invalid)}），这些集的模型意见没算进来" if invalid else ""),
            f"- **下限·必改 {len(floor)} 条**，上限·可提 {len(ceil)} 条。下限问题按维度：" + ("、".join(f"{k} {v}" for k, v in dims.most_common()) or "无"),
            f"- 逐集裁决：可过 {verdicts.get('pass', 0)} 集，要改 {verdicts.get('fix', 0)} 集，要重写 {verdicts.get('rewrite', 0)} 集",
-           "- 整季层（留存曲线、在第几集塌、兑现重复、总弹簧）是第二期，这份报告还不含。", "",
-           "## 逐集一览", "",
+           ""]
+    if len(cards) >= 2:
+        s, _ = season_data(cfg, eps)
+        sst, _, scard = season_status(cfg, eps, s)
+        out += season.report_section(s, scard if sst == "ok" else None)
+    out += ["## 逐集一览", "",
            "| 集 | 全文字数 | 场 | 地点 | 钩子 | 情绪 | 口吻 | 下限 | 上限 | 裁决 |", "|---|---|---|---|---|---|---|---|---|---|"]
     vt = {"pass": "可过", "fix": "要改", "rewrite": "要重写"}
     for n in sorted(eps):
@@ -350,9 +427,11 @@ def main():
         else:
             p.add_argument("--out", required=True)
             p.add_argument("--bible")
+            p.add_argument("--spring-ep", type=int, help="总弹簧（最大的身份/底牌揭晓）计划落在第几集；知道就给，整季层会核对之前的大揭晓")
     p = sub.add_parser("check", help="校验审查卡")
     p.add_argument("dir")
     p.add_argument("--ep", type=int)
+    p.add_argument("--season", action="store_true", help="校验整季卡 season-card.json")
     p = sub.add_parser("report", help="合成审查报告")
     p.add_argument("dir")
     p.add_argument("--out")
